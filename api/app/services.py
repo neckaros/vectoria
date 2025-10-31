@@ -1,5 +1,6 @@
+import hashlib
 import io
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 from markitdown import MarkItDown
 from sqlalchemy import select, func, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +11,15 @@ from app.config import OPENAI_API_KEY
 client = OpenAI(api_key=OPENAI_API_KEY)
 markitdown = MarkItDown()
 
+def compute_hash(data: Union[str, bytes]) -> str:
+    """
+    Compute SHA256 hash of content for deduplication.
+    Accepts both string and bytes input.
+    """
+    if isinstance(data, str):
+        data = data.encode()
+    
+    return hashlib.sha256(data).hexdigest()
 
 def convert_to_markdown(file_bytes: bytes, filename: str) -> str:
     """Convert any supported document to Markdown"""
@@ -120,40 +130,53 @@ async def insert_document_embeddings(
     session: AsyncSession,
     file_bytes: bytes,
     filename: str,
+    hash: Optional[str] = None,
+    title: Optional[str] = None,
+    author: Optional[str] = None,
+    category: Optional[str] = None,
+    url: Optional[str] = None,
+    parent_url: Optional[str] = None,
     metadata: Optional[Dict[str, Any]] = None
 ) -> int:
-    """
-    Convert document to Markdown, chunk intelligently, and insert embeddings
-    """
-    # Convert to markdown
+    
+    if not hash:
+        hash = compute_hash(file_bytes)
+
+
+    existing = await session.execute(
+        select(Embedding).where(Embedding.hash == hash)
+    )
+    if existing.scalars().first():
+        return 0
+
+
+    """Insert embeddings with full document metadata"""
     markdown_text = convert_to_markdown(file_bytes, filename)
+    chunks = chunk_markdown_by_sections(markdown_text)
     
-    # Chunk by structure
-    chunks = chunk_markdown_by_sections(markdown_text, max_chunk_size=1000)
-    
-    # Create and insert embeddings
     count = 0
     for i, chunk_data in enumerate(chunks):
-        # Get embedding
+        # Check if this chunk already exists (deduplication)
+        
+      
         embedding_vector = get_embedding(chunk_data['content'])
         
-        # Prepare metadata
-        chunk_metadata = metadata.copy() if metadata else {}
-        chunk_metadata.update({
-            "chunk_index": i,
-            "total_chunks": len(chunks),
-            "header": chunk_data['header'],
-            "header_level": chunk_data['level'],
-            "text_length": chunk_data['size'],
-            "format": "markdown"
-        })
-        
-        # Create embedding record
         embedding_record = Embedding(
-            source_url=filename,
-            content=chunk_data['content'],
-            doc_metadata=chunk_metadata,
-            embedding=embedding_vector
+            title=title or filename,
+            author=author,
+            mimetype=get_mimetype(filename),  # Helper function
+            category=category,
+            source=filename,
+            url=url,
+            parent_url=parent_url,
+            chunk_index=i,
+            total_chunks=len(chunks),
+            header=chunk_data['header'],
+            header_level=chunk_data['level'],
+            markdown=chunk_data['content'],
+            hash=hash,
+            embedding=embedding_vector,
+            doc_metadata=metadata
         )
         
         session.add(embedding_record)
@@ -161,6 +184,25 @@ async def insert_document_embeddings(
     
     await session.commit()
     return count
+
+
+def get_mimetype(filename: str) -> str:
+    """Get MIME type from filename"""
+    ext_to_mime = {
+        '.pdf': 'application/pdf',
+        '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        '.doc': 'application/msword',
+        '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        '.txt': 'text/plain',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.png': 'image/png',
+        '.html': 'text/html',
+    }
+    ext = '.' + filename.split('.')[-1].lower()
+    return ext_to_mime.get(ext, 'application/octet-stream')
+
 
 async def get_unique_categories(session: AsyncSession) -> List[str]:
     """Get all unique categories from metadata"""

@@ -1,3 +1,5 @@
+import logging
+from app.logging_config import logger
 from fastapi import FastAPI, Depends, UploadFile, File, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
@@ -11,6 +13,7 @@ from app.services import (
     insert_document_embeddings,
     vector_search
 )
+logger = logging.getLogger("app")
 
 app = FastAPI(title="Vectoria API")
 
@@ -40,31 +43,34 @@ async def count_embeddings(session: AsyncSession = Depends(get_session)):
 @app.post("/api/embeddings/upload")
 async def upload_document(
     file: UploadFile = File(...),
+    title: Optional[str] = None,
+    author: Optional[str] = None,
     category: Optional[str] = None,
+    url: Optional[str] = None,
+    parent_url: Optional[str] = None,
     session: AsyncSession = Depends(get_session)
 ):
+    """Upload and vectorize document with full metadata"""
+    if not file.filename:
+        raise HTTPException(status_code=400, detail=f"No filename provided")
     supported = ['.pdf', '.docx', '.doc', '.xlsx', '.pptx', '.jpg', '.jpeg', '.png', '.html', '.txt']
-    ext = '.' + file.filename.split('.')[-1].lower() if file.filename else ".bin"
+    ext = '.' + file.filename.split('.')[-1].lower()
     
     if ext not in supported:
         raise HTTPException(status_code=400, detail=f"Unsupported format")
     
-    file_bytes = await file.read()
-    
-    metadata = {
-        "filename": file.filename,
-        "content_type": file.content_type,
-        "file_extension": ext
-    }
-    if category:
-        metadata["category"] = category
+    file_bytes = await file.read()  
     
     try:
         count = await insert_document_embeddings(
             session=session,
             file_bytes=file_bytes,
-            filename=file.filename or "file",
-            metadata=metadata
+            filename=file.filename,
+            title=title or file.filename,
+            author=author,
+            category=category,
+            url=url,
+            parent_url=parent_url
         )
         
         return {
@@ -74,7 +80,6 @@ async def upload_document(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
 
 @app.post("/api/file/markdown")
 async def file_to_markdown(
