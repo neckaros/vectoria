@@ -5,6 +5,8 @@ from pydantic import BaseModel
 
 from app.database import get_session
 from app.services import (
+    chunk_markdown_by_sections,
+    convert_to_markdown,
     get_unique_categories,
     insert_document_embeddings,
     vector_search
@@ -69,6 +71,46 @@ async def upload_document(
             "message": "Document processed successfully",
             "filename": file.filename,
             "chunks_created": count
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+
+@app.post("/api/file/markdown")
+async def file_to_markdown(
+    file: UploadFile = File(...),
+    chunk: bool = False,
+):
+    supported = ['.pdf', '.docx', '.doc', '.xlsx', '.pptx', '.jpg', '.jpeg', '.png', '.html', '.txt']
+    ext = '.' + file.filename.split('.')[-1].lower() if file.filename else ".bin"
+    
+    if ext not in supported:
+        raise HTTPException(status_code=400, detail=f"Unsupported format")
+    
+    file_bytes = await file.read()
+    
+    metadata = {
+        "filename": file.filename,
+        "content_type": file.content_type,
+        "file_extension": ext
+    }
+    try:
+        text = convert_to_markdown(
+            file_bytes=file_bytes,
+            filename=file.filename or "file"
+        )
+
+        
+        chunks = chunk_markdown_by_sections(text, max_chunk_size=1000) if chunk else None
+        
+        
+        
+        return {
+            "message": "Document processed successfully",
+            "filename": file.filename,
+            "metadata": metadata,
+            "markdown": text,
+            "chunks": chunks or None
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

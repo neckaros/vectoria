@@ -1,0 +1,24 @@
+services:
+  vectoria:
+    image: pgvector/pgvector:pg17
+    container_name: vectoria-db
+    env_file: .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-vectordb}
+      APP_USER_PASSWORD: ${APP_USER_PASSWORD:-changeme}
+      RAG_USER_PASSWORD: ${RAG_USER_PASSWORD:-ragpassword}
+    ports:
+      - "5432:5432"
+    volumes:
+      - vectoria_data:/var/lib/postgresql/data
+      - ./init.sh:/docker-entrypoint-initdb.d/init.sh
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-vectordb}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+volumes:
+  vectoria_data:

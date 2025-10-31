@@ -20,11 +20,19 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
     -- Create embeddings table
     CREATE TABLE IF NOT EXISTS embeddings (
         id SERIAL PRIMARY KEY,
-        source_url TEXT NOT NULL,
-        content TEXT NOT NULL,
+        title TEXT NOT NULL,
+        author TEXT,
+        mimetype TEXT,
+        category TEXT,
+        source TEXT NOT NULL,
+        url TEXT,
+        parent_url TEXT,
+        markdown TEXT NOT NULL,
+        hash TEXT NOT NULL,
         metadata JSONB,
         embedding vector(1536),
-        created_at TIMESTAMP DEFAULT NOW()
+        created_at TIMESTAMP DEFAULT NOW(),
+        last_modified TIMESTAMP DEFAULT NOW()
     );
 
     -- Grant full access to app_user

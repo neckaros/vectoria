@@ -18,10 +18,19 @@ def convert_to_markdown(file_bytes: bytes, filename: str) -> str:
     return result.text_content
 
 
-def chunk_markdown_by_sections(markdown_text: str, max_chunk_size: int = 1000) -> List[Dict[str, Any]]:
+def chunk_markdown_by_sections(
+    markdown_text: str, 
+    max_chunk_size: int = 1000,
+    min_chunk_size: int = 200,
+    overlap_size: int = 100
+) -> List[Dict[str, Any]]:
     """
-    Split markdown by headers while respecting max size
-    Returns list of dicts with content and metadata
+    Split markdown by headers while respecting size constraints and overlap.
+    
+    Args:
+        max_chunk_size: Maximum characters per chunk
+        min_chunk_size: Minimum characters (chunks below this get merged with previous)
+        overlap_size: Number of characters to overlap between chunks
     """
     chunks = []
     lines = markdown_text.split('\n')
@@ -30,6 +39,34 @@ def chunk_markdown_by_sections(markdown_text: str, max_chunk_size: int = 1000) -
     current_header = ""
     current_level = 0
     chunk_size = 0
+    overlap_buffer = []  # Store lines for overlap
+    
+    def save_chunk():
+        """Helper to save current chunk if it meets minimum size"""
+        nonlocal current_chunk, chunks, overlap_buffer
+        
+        if not current_chunk:
+            return
+            
+        content = '\n'.join(current_chunk).strip()
+        size = len(content)
+        
+        # If chunk is too small, merge with previous chunk
+        if size < min_chunk_size and chunks:
+            chunks[-1]['content'] += '\n\n' + content
+            chunks[-1]['size'] = len(chunks[-1]['content'])
+        elif size > 0:  # Only save non-empty chunks
+            chunks.append({
+                'content': content,
+                'header': current_header,
+                'level': current_level,
+                'size': size
+            })
+        
+        # Keep last N characters for overlap
+        if overlap_size > 0 and current_chunk:
+            overlap_text = '\n'.join(current_chunk)[-overlap_size:]
+            overlap_buffer = overlap_text.split('\n')
     
     for line in lines:
         line_size = len(line)
@@ -37,44 +74,37 @@ def chunk_markdown_by_sections(markdown_text: str, max_chunk_size: int = 1000) -
         # Detect markdown headers
         if line.startswith('#'):
             header_level = len(line) - len(line.lstrip('#'))
+            
+            # Start new chunk on major headers (h1, h2) or when exceeding max size
+            if (header_level <= 2 or chunk_size > max_chunk_size) and current_chunk:
+                save_chunk()
+                
+                # Start new chunk with overlap from previous
+                current_chunk = overlap_buffer.copy()
+                chunk_size = sum(len(l) for l in overlap_buffer)
+                overlap_buffer = []
+            
             current_header = line.lstrip('#').strip()
             current_level = header_level
-            
-            # Start new chunk if we have content and hit a major header
-            if current_chunk and (header_level <= 2 or chunk_size > max_chunk_size):
-                chunks.append({
-                    'content': '\n'.join(current_chunk).strip(),
-                    'header': current_header,
-                    'level': current_level,
-                    'size': chunk_size
-                })
-                current_chunk = []
-                chunk_size = 0
         
         current_chunk.append(line)
         chunk_size += line_size
         
-        # Force split if chunk too large
+        # Force split if chunk too large (with some margin)
         if chunk_size > max_chunk_size * 1.5:
-            chunks.append({
-                'content': '\n'.join(current_chunk).strip(),
-                'header': current_header,
-                'level': current_level,
-                'size': chunk_size
-            })
-            current_chunk = []
-            chunk_size = 0
+            save_chunk()
+            
+            # Start new chunk with overlap
+            current_chunk = overlap_buffer.copy()
+            chunk_size = sum(len(l) for l in overlap_buffer)
+            overlap_buffer = []
     
-    # Add remaining content
+    # Save remaining content
     if current_chunk:
-        chunks.append({
-            'content': '\n'.join(current_chunk).strip(),
-            'header': current_header,
-            'level': current_level,
-            'size': chunk_size
-        })
+        save_chunk()
     
-    return [c for c in chunks if c['content']]  # Filter empty chunks
+    return [c for c in chunks if c['content']]
+
 
 
 def get_embedding(text: str) -> List[float]:
