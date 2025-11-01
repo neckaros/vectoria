@@ -229,7 +229,9 @@ async def vector_search(
     query: str,
     limit: int = 5,
     category_filter: Optional[str] = None,
+    source_filter: Optional[str] = None,
     author_filter: Optional[str] = None,
+    parent_url: Optional[str] = None,
     rerank: bool = False,
     initial_k: int = 20
 ) -> List[EmbeddingResponse]:
@@ -239,7 +241,16 @@ async def vector_search(
         initial_k = limit * 5
     query_embedding = get_embedding(query)
     retrieve_limit = initial_k if rerank else limit
-    
+
+    if parent_url and parent_url.endswith("%"):
+        start_parent_url = parent_url
+        strict_parent_url = None
+    elif parent_url:
+        strict_parent_url = parent_url
+        start_parent_url = None
+    else:
+        strict_parent_url = None
+        start_parent_url = None
     sql = text("""
         SELECT 
             id, title, author, mimetype, category, source, url, parent_url,
@@ -248,14 +259,20 @@ async def vector_search(
             1 - (embedding <=> CAST(:query_embedding AS vector)) as similarity
         FROM embeddings
         WHERE 
-            (CAST(:category_filter AS TEXT) IS NULL OR category = CAST(:category_filter AS TEXT))
-            AND (CAST(:author_filter AS TEXT) IS NULL OR author = CAST(:author_filter AS TEXT))
+            (:category_filter IS NULL OR category = :category_filter)
+            AND (:author_filter IS NULL OR author = :author_filter)
+            AND (:source_filter IS NULL OR source = :source_filter)
+            AND (:start_parent_url IS NULL OR parent_url LIKE :start_parent_url)
+            AND (:strict_parent_url IS NULL OR parent_url = :strict_parent_url)
         ORDER BY embedding <=> CAST(:query_embedding AS vector)
         LIMIT :retrieve_limit
     """).bindparams(
         bindparam("query_embedding", value=str(query_embedding), type_=String),  # SQLAlchemy String
         bindparam("category_filter", value=category_filter, type_=String),
         bindparam("author_filter", value=author_filter, type_=String),
+        bindparam("source_filter", value=source_filter, type_=String),
+        bindparam("start_parent_url", value=start_parent_url, type_=String),
+        bindparam("strict_parent_url", value=strict_parent_url, type_=String),
         bindparam("retrieve_limit", value=retrieve_limit, type_=Integer),  # SQLAlchemy Integer
     )
     

@@ -127,7 +127,9 @@ async def search(
     limit: int = Query(5, description="Maximum number of final results to return"),
     initial_k: int = Query(20, description="Number of candidates to retrieve before reranking"),
     category_filter: Optional[str] = Query(None, description="Filter results by category"),
+    source_filter: Optional[str] = Query(None, description="Filter results by source"),
     author_filter: Optional[str] = Query(None, description="Filter results by author"),
+    parent_url: Optional[str] = Query(None, description="Filter results by parent_url (use %% at the end for prefix match)"),
     rerank: bool = Query(False, description="Enable cross-encoder reranking for better accuracy (slower)"),
     session: AsyncSession = Depends(get_session)
 ):
@@ -146,6 +148,8 @@ async def search(
             limit=limit,
             category_filter=category_filter,
             author_filter=author_filter,
+            source_filter=source_filter,
+            parent_url=parent_url,
             rerank=rerank,
             initial_k=initial_k
         )
