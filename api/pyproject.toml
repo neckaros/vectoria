@@ -12,6 +12,7 @@ dependencies = [
     "pgvector>=0.4.1",
     "psycopg2-binary>=2.9.11",
     "sqlalchemy>=2.0.44",
+    "sentence-transformers>=3.3.1",
 ]
 
 [project.scripts]

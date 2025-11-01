@@ -1,15 +1,18 @@
 import hashlib
 import io
+import logging
 from typing import List, Dict, Any, Optional, Union
 from markitdown import MarkItDown
-from sqlalchemy import select, func, text
+from sqlalchemy import Integer, String, and_, bindparam, select, func, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from openai import OpenAI
 from app.database import Embedding
 from app.config import OPENAI_API_KEY
+from app.models import EmbeddingResponse
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 markitdown = MarkItDown()
+logger = logging.getLogger("services")
 
 def compute_hash(data: Union[str, bytes]) -> str:
     """
@@ -218,51 +221,119 @@ async def get_unique_categories(session: AsyncSession) -> List[str]:
     categories = [row.category for row in result if row.category]
     return categories
 
+
+from sqlalchemy import select, and_, true
+
 async def vector_search(
     session: AsyncSession,
     query: str,
     limit: int = 5,
-    category_filter: Optional[str] = None
-) -> List[Dict[str, Any]]:
-    """
-    Perform vector similarity search
-    """
-    # Get query embedding
-    query_embedding = get_embedding(query)
+    category_filter: Optional[str] = None,
+    author_filter: Optional[str] = None,
+    rerank: bool = False,
+    initial_k: int = 20
+) -> List[EmbeddingResponse]:
+    """Perform vector similarity search"""
+    logger.info(f"Vector search: '{query[:50]}...', rerank={rerank}")
     
-    # Build SQL query with cosine distance
+    query_embedding = get_embedding(query)
+    retrieve_limit = initial_k if rerank else limit
+    
     sql = text("""
         SELECT 
-            id,
-            source_url,
-            content,
-            metadata,
-            created_at,
-            1 - (embedding <=> :query_embedding) as similarity
+            id, title, author, mimetype, category, source, url, parent_url,
+            chunk_index, total_chunks, header, header_level, markdown, hash,
+            metadata, created_at, last_modified,
+            1 - (embedding <=> CAST(:query_embedding AS vector)) as similarity
         FROM embeddings
-        WHERE (:category_filter IS NULL OR metadata->>'category' = :category_filter)
-        ORDER BY embedding <=> :query_embedding
-        LIMIT :limit
-    """)
+        WHERE 
+            (CAST(:category_filter AS TEXT) IS NULL OR category = CAST(:category_filter AS TEXT))
+            AND (CAST(:author_filter AS TEXT) IS NULL OR author = CAST(:author_filter AS TEXT))
+        ORDER BY embedding <=> CAST(:query_embedding AS vector)
+        LIMIT :retrieve_limit
+    """).bindparams(
+        bindparam("query_embedding", value=str(query_embedding), type_=String),  # SQLAlchemy String
+        bindparam("category_filter", value=category_filter, type_=String),
+        bindparam("author_filter", value=author_filter, type_=String),
+        bindparam("retrieve_limit", value=retrieve_limit, type_=Integer),  # SQLAlchemy Integer
+    )
     
     result = await session.execute(
         sql,
         {
             "query_embedding": str(query_embedding),
-            "limit": limit,
-            "category_filter": category_filter
+            "category_filter": category_filter,
+            "author_filter": author_filter,
+            "retrieve_limit": retrieve_limit
         }
     )
     
-    results = []
-    for row in result:
-        results.append({
+    
+    # Convert to Pydantic
+    results = [
+        EmbeddingResponse.model_validate({
             "id": row.id,
-            "source_url": row.source_url,
-            "content": row.content,
+            "title": row.title,
+            "author": row.author,
+            "mimetype": row.mimetype,
+            "category": row.category,
+            "source": row.source,
+            "url": row.url,
+            "parent_url": row.parent_url,
+            "chunk_index": row.chunk_index,
+            "total_chunks": row.total_chunks,
+            "header": row.header,
+            "header_level": row.header_level,
+            "markdown": row.markdown,
+            "hash": row.hash,
             "metadata": row.metadata,
             "created_at": row.created_at,
-            "similarity": float(row.similarity)
+            "last_modified": row.last_modified,
+            "vector_similarity": float(row.similarity),
         })
+        for row in result
+    ]
     
-    return results
+    logger.info(f"Retrieved {len(results)} candidates")
+    
+    if rerank and len(results) > limit:
+        results = await rerank_results(query, results, top_k=limit)
+    
+    return results[:limit]
+
+
+async def rerank_results(
+    query: str,
+    documents: List[EmbeddingResponse],
+    top_k: int = 5,
+    model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+) -> List[EmbeddingResponse]:
+    """Rerank with Pydantic models"""
+    from sentence_transformers import CrossEncoder
+    
+    try:
+        logger.debug(f"Loading reranker: {model_name}")
+        reranker = CrossEncoder(model_name, max_length=512)
+        
+        pairs = [
+            [query[:200], doc.content[:300]]  # Use .content (typed!)
+            for doc in documents
+        ]
+        
+        scores = reranker.predict(pairs)
+        
+        # Update Pydantic models with rerank scores
+        for i, doc in enumerate(documents):
+            doc.rerank_score = float(scores[i])
+            doc.original_rank = i + 1
+        
+        # Sort by rerank score
+        reranked = sorted(documents, key=lambda x: x.rerank_score or 0, reverse=True)
+        
+        logger.info(f"Reranking complete. Top score: {reranked[0].rerank_score:.3f}")
+        return reranked[:top_k]
+        
+    except Exception as e:
+        logger.error(f"Reranking failed: {e}")
+        return documents[:top_k]
+

@@ -27,3 +27,11 @@ cd api
 uv sync
 uv run dev
 ```
+
+Or if you want more control you can directly run:
+
+```
+cd api
+uv sync
+uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 7980
+```

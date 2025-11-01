@@ -6,6 +6,7 @@ from typing import List, Optional
 from pydantic import BaseModel
 
 from app.database import get_session
+from app.models import SearchResponse
 from app.services import (
     chunk_markdown_by_sections,
     convert_to_markdown,
@@ -120,20 +121,35 @@ async def file_to_markdown(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/search")
+@app.post("/api/search", response_model=SearchResponse)
 async def search(
     query: str,
     limit: int = 5,
     category_filter: Optional[str] = None,
+    author_filter: Optional[str] = None,
+    rerank: bool = False,
     session: AsyncSession = Depends(get_session)
 ):
+    """Vector search with typed responses"""
+    logger.info(f"Search: query='{query}', rerank={rerank}")
+    
     try:
         results = await vector_search(
             session=session,
             query=query,
             limit=limit,
-            category_filter=category_filter
+            category_filter=category_filter,
+            author_filter=author_filter,
+            rerank=rerank,
+            initial_k=20
         )
-        return results
+        
+        return SearchResponse(
+            query=query,
+            results=results,
+            count=len(results),
+            reranked=rerank
+        )
     except Exception as e:
+        logger.error(f"Search failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
