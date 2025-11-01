@@ -123,14 +123,20 @@ async def file_to_markdown(
 
 @app.post("/api/search", response_model=SearchResponse)
 async def search(
-    query: str,
-    limit: int = 5,
-    category_filter: Optional[str] = None,
-    author_filter: Optional[str] = None,
-    rerank: bool = False,
+    query: str = Query(..., description="Search query text"),
+    limit: int = Query(5, description="Maximum number of final results to return"),
+    initial_k: int = Query(20, description="Number of candidates to retrieve before reranking"),
+    category_filter: Optional[str] = Query(None, description="Filter results by category"),
+    author_filter: Optional[str] = Query(None, description="Filter results by author"),
+    rerank: bool = Query(False, description="Enable cross-encoder reranking for better accuracy (slower)"),
     session: AsyncSession = Depends(get_session)
 ):
-    """Vector search with typed responses"""
+    """
+    Vector similarity search with optional reranking.
+    
+    Retrieves documents most similar to the query using vector embeddings,
+    with optional reranking to improve relevance.
+    """
     logger.info(f"Search: query='{query}', rerank={rerank}")
     
     try:
@@ -141,7 +147,7 @@ async def search(
             category_filter=category_filter,
             author_filter=author_filter,
             rerank=rerank,
-            initial_k=20
+            initial_k=initial_k
         )
         
         return SearchResponse(

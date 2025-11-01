@@ -235,7 +235,8 @@ async def vector_search(
 ) -> List[EmbeddingResponse]:
     """Perform vector similarity search"""
     logger.info(f"Vector search: '{query[:50]}...', rerank={rerank}")
-    
+    if initial_k <= limit:
+        initial_k = limit * 5
     query_embedding = get_embedding(query)
     retrieve_limit = initial_k if rerank else limit
     
