@@ -2,6 +2,7 @@ import logging
 from pathlib import Path
 
 import httpx
+from app.auth import verify_token
 from app.logging_config import logger
 from fastapi import FastAPI, Depends, UploadFile, File, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -46,7 +47,6 @@ async def count_embeddings(session: AsyncSession = Depends(get_session)):
 
 @app.post("/api/embeddings/upload")
 async def upload_document(
-    project: str,
     parent_url: str,
     file: Optional[UploadFile] = File(None),
     url: Optional[str] = None,
@@ -55,13 +55,17 @@ async def upload_document(
     hash: Optional[str] = Query(None, description="Optionally provide a hash of the file to be inserted to check for duplicates (will return a 400 error if exists and override is set to false)"),
     override: bool = Query(False, description="Override existing embedding if existing document with same hash exist for the project"),
     category: Optional[str] = None,
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
+    auth: dict = Depends(verify_token),
 ):
     """
     Upload and vectorize document with full metadata.
     Provide either a file upload or a URL to download.
     """
-    logger.info(f"Upload request: file={file.filename if file else None}, url={url}")
+    
+    project = auth["project"]
+
+    logger.info(f"Upload request: project={project} file={file.filename if file else None}, url={url}")
 
     if hash and not override:
         from app.services import check_for_existing_embedding
@@ -191,7 +195,8 @@ async def search(
     author_filter: Optional[str] = Query(None, description="Filter results by author"),
     parent_url: Optional[str] = Query(None, description="Filter results by parent_url (use %% at the end for prefix match)"),
     rerank: bool = Query(False, description="Enable cross-encoder reranking for better accuracy (slower)"),
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
+    auth: dict = Depends(verify_token),
 ):
     """
     Vector similarity search with optional reranking.
@@ -199,6 +204,7 @@ async def search(
     Retrieves documents most similar to the query using vector embeddings,
     with optional reranking to improve relevance.
     """
+    project = auth["project"]
     logger.info(f"Search: query='{query}', rerank={rerank}")
     
     try:

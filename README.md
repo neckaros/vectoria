@@ -35,3 +35,10 @@ cd api
 uv sync
 uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 7980
 ```
+
+Create per project API Keys in your env.
+
+exemple 
+```env
+API_TOKENS='{"project1": ["neckia-api-key-1", "neckia-api-key-2"], "demo": ["demo-token-12345"]}'
+```

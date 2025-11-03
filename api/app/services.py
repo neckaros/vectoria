@@ -239,6 +239,7 @@ async def vector_search(
     session: AsyncSession,
     query: str,
     limit: int = 5,
+    project: Optional[str] = None,
     category_filter: Optional[str] = None,
     source_filter: Optional[str] = None,
     author_filter: Optional[str] = None,
@@ -264,12 +265,13 @@ async def vector_search(
         start_parent_url = None
     sql = text("""
         SELECT 
-            id, title, author, mimetype, category, source, url, parent_url,
+            id, project, title, author, mimetype, category, source, url, parent_url,
             chunk_index, total_chunks, header, header_level, markdown, hash,
             metadata, created_at, last_modified,
             1 - (embedding <=> CAST(:query_embedding AS vector)) as similarity
         FROM embeddings
         WHERE 
+            (:project_filter IS NULL OR project = :project_filter)
             (:category_filter IS NULL OR category = :category_filter)
             AND (:author_filter IS NULL OR author = :author_filter)
             AND (:source_filter IS NULL OR source = :source_filter)
@@ -278,13 +280,14 @@ async def vector_search(
         ORDER BY embedding <=> CAST(:query_embedding AS vector)
         LIMIT :retrieve_limit
     """).bindparams(
-        bindparam("query_embedding", value=str(query_embedding), type_=String),  # SQLAlchemy String
+        bindparam("project_filter", value=project, type_=String),
+        bindparam("query_embedding", value=str(query_embedding), type_=String),  
         bindparam("category_filter", value=category_filter, type_=String),
         bindparam("author_filter", value=author_filter, type_=String),
         bindparam("source_filter", value=source_filter, type_=String),
         bindparam("start_parent_url", value=start_parent_url, type_=String),
         bindparam("strict_parent_url", value=strict_parent_url, type_=String),
-        bindparam("retrieve_limit", value=retrieve_limit, type_=Integer),  # SQLAlchemy Integer
+        bindparam("retrieve_limit", value=retrieve_limit, type_=Integer),  
     )
     
     result = await session.execute(
@@ -302,6 +305,7 @@ async def vector_search(
     results = [
         EmbeddingResponse.model_validate({
             "id": row.id,
+            "project": row.project,
             "title": row.title,
             "author": row.author,
             "mimetype": row.mimetype,
