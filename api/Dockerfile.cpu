@@ -18,7 +18,7 @@ ENV UV_LINK_MODE=copy
 RUN uv pip install --system torch torchvision --index-url https://download.pytorch.org/whl/cpu
 
 # Install dependencies
-RUN uv sync --frozen --no-binary :all: torch torchvision
+RUN uv sync
 
 # Expose port
 EXPOSE 7979
