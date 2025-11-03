@@ -154,7 +154,7 @@ async def insert_document_embeddings(
 
 
     """Insert embeddings with full document metadata"""
-    markdown_text = convert_to_markdown(file_bytes, filename)
+    markdown_text = convert_to_markdown(file_bytes, filename) if filename != ".md" else file_bytes.decode()
     chunks = chunk_markdown_by_sections(markdown_text)
     
     count = 0

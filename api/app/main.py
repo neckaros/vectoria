@@ -54,7 +54,7 @@ async def upload_document(
     """Upload and vectorize document with full metadata"""
     if not file.filename:
         raise HTTPException(status_code=400, detail=f"No filename provided")
-    supported = ['.pdf', '.docx', '.doc', '.xlsx', '.pptx', '.jpg', '.jpeg', '.png', '.html', '.txt']
+    supported = ['.pdf', '.docx', '.doc', '.xlsx', '.pptx', '.jpg', '.jpeg', '.png', '.html', '.txt', '.md']
     ext = '.' + file.filename.split('.')[-1].lower()
     
     if ext not in supported:
