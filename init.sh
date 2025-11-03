@@ -20,6 +20,7 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
     -- Create embeddings table
     CREATE TABLE IF NOT EXISTS embeddings (
         id SERIAL PRIMARY KEY,
+        project TEXT NOT NULL,
         title TEXT NOT NULL,
         author TEXT,
         mimetype TEXT,
@@ -48,6 +49,9 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
     GRANT USAGE, SELECT ON SEQUENCE embeddings_id_seq TO rag_user;
 
     -- Create indexes
+    CREATE INDEX idx_embeddings_projects ON embeddings(project);
+    CREATE INDEX idx_embeddings_category ON embeddings(category);
+    CREATE INDEX idx_embeddings_hash ON embeddings(hash);
     CREATE INDEX idx_embeddings_source_url ON embeddings(source_url);
 
     -- HNSW index for better vector search performance

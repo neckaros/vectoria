@@ -46,11 +46,14 @@ async def count_embeddings(session: AsyncSession = Depends(get_session)):
 
 @app.post("/api/embeddings/upload")
 async def upload_document(
+    project: str,
     parent_url: str,
     file: Optional[UploadFile] = File(None),
     url: Optional[str] = None,
     title: Optional[str] = None,
     author: Optional[str] = None,
+    hash: Optional[str] = Query(None, description="Optionally provide a hash of the file to be inserted to check for duplicates (will return a 400 error if exists and override is set to false)"),
+    override: bool = Query(False, description="Override existing embedding if existing document with same hash exist for the project"),
     category: Optional[str] = None,
     session: AsyncSession = Depends(get_session)
 ):
@@ -59,6 +62,12 @@ async def upload_document(
     Provide either a file upload or a URL to download.
     """
     logger.info(f"Upload request: file={file.filename if file else None}, url={url}")
+
+    if hash and not override:
+        from app.services import check_for_existing_embedding
+        exists = await check_for_existing_embedding(session, hash)
+        if exists:
+            raise HTTPException(status_code=400, detail="Document with the same hash already exists. Use override=true to force re-ingestion.")
     
     # Validate: need either file or URL
     if not file and not url:
@@ -111,11 +120,13 @@ async def upload_document(
     try:
         count = await insert_document_embeddings(
             session=session,
+            project=project,
             file_bytes=file_bytes,
             filename=filename,
             title=title or filename,
             author=author,
             category=category,
+            hash=hash,
             url=url,
             parent_url=parent_url
         )

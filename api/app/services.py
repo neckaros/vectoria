@@ -128,11 +128,21 @@ def get_embedding(text: str) -> List[float]:
     )
     return response.data[0].embedding
 
+async def check_for_existing_embedding(
+    session: AsyncSession, hash: str
+) -> bool:
+    """Check if an embedding with the given hash already exists"""
+    result = await session.execute(
+        select(Embedding).where(Embedding.hash == hash)
+    )
+    existing = result.scalars().first()
+    return existing is not None
 
 async def insert_document_embeddings(
     session: AsyncSession,
     file_bytes: bytes,
     filename: str,
+    project: str,
     hash: Optional[str] = None,
     title: Optional[str] = None,
     author: Optional[str] = None,
@@ -166,6 +176,7 @@ async def insert_document_embeddings(
         
         embedding_record = Embedding(
             title=title or filename,
+            project=project,
             author=author,
             mimetype=get_mimetype(filename),  # Helper function
             category=category,

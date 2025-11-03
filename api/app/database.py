@@ -22,8 +22,10 @@ class Embedding(Base):
     # Primary key
     id = Column(Integer, primary_key=True)
     
+    project = Column(Text, nullable=False, index=True)
+
     # Document metadata
-    title = Column(Text, nullable=False, index=True)
+    title = Column(Text, nullable=False, index=False)
     author = Column(Text, index=True)
     mimetype = Column(String(100))  # e.g. "application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     category = Column(String(100), index=True)
@@ -50,8 +52,8 @@ class Embedding(Base):
     doc_metadata = Column("metadata", JSONB)
     
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
-    last_modified = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=False)
+    last_modified = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, index=False)
     
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
     async with async_session_maker() as session:
