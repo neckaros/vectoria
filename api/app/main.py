@@ -1,10 +1,13 @@
 import logging
+from pathlib import Path
+
+import httpx
 from app.logging_config import logger
 from fastapi import FastAPI, Depends, UploadFile, File, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from pydantic import BaseModel
-
+from app.tools import get_filename_from_headers
 from app.database import get_session
 from app.models import SearchResponse
 from app.services import (
@@ -43,31 +46,74 @@ async def count_embeddings(session: AsyncSession = Depends(get_session)):
 
 @app.post("/api/embeddings/upload")
 async def upload_document(
-    file: UploadFile = File(...),
+    parent_url: str,
+    file: Optional[UploadFile] = File(None),
+    url: Optional[str] = None,
     title: Optional[str] = None,
     author: Optional[str] = None,
     category: Optional[str] = None,
-    url: Optional[str] = None,
-    parent_url: Optional[str] = None,
     session: AsyncSession = Depends(get_session)
 ):
-    """Upload and vectorize document with full metadata"""
-    if not file.filename:
-        raise HTTPException(status_code=400, detail=f"No filename provided")
+    """
+    Upload and vectorize document with full metadata.
+    Provide either a file upload or a URL to download.
+    """
+    logger.info(f"Upload request: file={file.filename if file else None}, url={url}")
+    
+    # Validate: need either file or URL
+    if not file and not url:
+        raise HTTPException(status_code=400, detail="Provide either a file or a URL to ingest")
+    
+    # Check if file was actually uploaded (file.filename exists and file has content)
+    has_file = file is not None and file.filename and file.size != 0
+    
+    if has_file:
+        assert file is not None  # Help type checker understand
+        # Handle file upload
+        filename = file.filename
+        file_bytes = await file.read()
+        logger.info(f"Uploaded file: {filename}, size: {len(file_bytes)} bytes")
+        
+        if len(file_bytes) == 0:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty")
+    
+    elif url:
+        # Handle URL download
+        try:
+            logger.info(f"Downloading from URL: {url}")
+            async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+                response = await client.get(url)
+                response.raise_for_status()
+                
+                file_bytes = response.content
+                filename = get_filename_from_headers(response.headers, url)
+                
+                logger.info(f"Downloaded {len(file_bytes)} bytes, filename: {filename}")
+                
+        except httpx.HTTPError as e:
+            logger.error(f"Failed to download URL: {e}")
+            raise HTTPException(status_code=400, detail=f"Failed to download URL: {str(e)}")
+    else:
+        raise HTTPException(status_code=400, detail="No valid file or URL provided")
+    if not filename:
+        raise HTTPException(status_code=400, detail="Could not determine filename")
+    # Validate file extension
     supported = ['.pdf', '.docx', '.doc', '.xlsx', '.pptx', '.jpg', '.jpeg', '.png', '.html', '.txt', '.md']
-    ext = '.' + file.filename.split('.')[-1].lower()
+    ext = Path(filename).suffix.lower()
     
     if ext not in supported:
-        raise HTTPException(status_code=400, detail=f"Unsupported format")
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Unsupported format: {ext}. Supported: {', '.join(supported)}"
+        )
     
-    file_bytes = await file.read()  
-    
+    # Process the document
     try:
         count = await insert_document_embeddings(
             session=session,
             file_bytes=file_bytes,
-            filename=file.filename,
-            title=title or file.filename,
+            filename=filename,
+            title=title or filename,
             author=author,
             category=category,
             url=url,
@@ -76,11 +122,14 @@ async def upload_document(
         
         return {
             "message": "Document processed successfully",
-            "filename": file.filename,
-            "chunks_created": count
+            "filename": filename,
+            "chunks_created": count,
+            "source": "url" if url and not has_file else "upload"
         }
     except Exception as e:
+        logger.error(f"Processing failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/api/file/markdown")
 async def file_to_markdown(
