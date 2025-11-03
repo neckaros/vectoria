@@ -52,7 +52,7 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
     CREATE INDEX idx_embeddings_projects ON embeddings(project);
     CREATE INDEX idx_embeddings_category ON embeddings(category);
     CREATE INDEX idx_embeddings_hash ON embeddings(hash);
-    CREATE INDEX idx_embeddings_source_url ON embeddings(source_url);
+    CREATE INDEX idx_embeddings_parent_url ON embeddings(parent_url);
 
     -- HNSW index for better vector search performance
     CREATE INDEX idx_embeddings_hnsw ON embeddings 
