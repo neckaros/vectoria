@@ -1,21 +1,32 @@
-FROM python:3.11-slim
+# Build stage
+FROM python:3.11-alpine AS builder
 
 WORKDIR /app
 
-# Install uv
-RUN pip install uv
+# Install uv with no cache
+RUN pip install --no-cache-dir uv
 
-# Copy project files
+# Copy dependency files first (for better layer caching)
 COPY pyproject.toml uv.lock* ./
-COPY README.md ./
-COPY app/ ./app/
-COPY dev.py ./
 
 # Set UV link mode to copy (needed for Docker)
 ENV UV_LINK_MODE=copy
 
-# Install dependencies
-RUN uv sync --frozen
+# Install dependencies without dev dependencies
+RUN uv sync --frozen --no-dev
+
+# Runtime stage
+FROM python:3.11-alpine
+
+WORKDIR /app
+
+# Copy only the virtual environment from builder
+COPY --from=builder /app/.venv /app/.venv
+
+# Copy application code
+COPY app/ ./app/
+COPY dev.py ./
+COPY README.md ./
 
 # Expose port
 EXPOSE 7979
