@@ -30,7 +30,7 @@ services:
       DATABASE_URL: postgresql://rag_user:${RAG_USER_PASSWORD}@vectoria:5432/vectordb
     depends_on:
       - vectoria
-    command: uv run uvicorn app.main:app --host 0.0.0.0 --port 7979
+    command: .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 7979
     volumes:
           # For models for reranking
           - huggingface_cache:/app/.cache/huggingface
