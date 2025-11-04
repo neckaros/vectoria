@@ -28,6 +28,7 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql://rag_user:${RAG_USER_PASSWORD}@vectoria:5432/vectordb
+      API_TOKENS: ${API_TOKENS}
     depends_on:
       - vectoria
     command: .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 7979
