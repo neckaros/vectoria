@@ -20,6 +20,8 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    networks:
+      - vectoria-internal
   vectoria_api:
     build: ./api
     container_name: vectoria-api
@@ -35,6 +37,11 @@ services:
     volumes:
           # For models for reranking
           - huggingface_cache:/app/.cache/huggingface
+    networks:
+      - vectoria-internal
 volumes:
   vectoria_data:
   huggingface_cache:
+networks:
+  vectoria-internal:          # ← Create internal network
+    driver: bridge
