@@ -50,6 +50,7 @@ async def upload_document(
     parent_url: str,
     file: Optional[UploadFile] = File(None),
     url: Optional[str] = None,
+    downloadurl: Optional[str] = None,
     title: Optional[str] = None,
     author: Optional[str] = None,
     hash: Optional[str] = Query(None, description="Optionally provide a hash of the file to be inserted to check for duplicates (will return a 400 error if exists and override is set to false)"),
@@ -67,15 +68,15 @@ async def upload_document(
 
     logger.info(f"Upload request: project={project} file={file.filename if file else None}, url={url}")
 
-    if hash and not override:
+    if hash:
         from app.services import check_for_existing_embedding
         exists = await check_for_existing_embedding(session, hash)
         if exists:
-            raise HTTPException(status_code=400, detail="Document with the same hash already exists. Use override=true to force re-ingestion.")
+            raise HTTPException(status_code=409, detail="Document with the same hash already exists. Use override=true to force re-ingestion.")
     
     # Validate: need either file or URL
-    if not file and not url:
-        raise HTTPException(status_code=400, detail="Provide either a file or a URL to ingest")
+    if not file and not downloadurl:
+        raise HTTPException(status_code=400, detail="Provide either a file or a URL (downloadurl) to ingest")
     
     # Check if file was actually uploaded (file.filename exists and file has content)
     has_file = file is not None and file.filename and file.size != 0
@@ -90,16 +91,16 @@ async def upload_document(
         if len(file_bytes) == 0:
             raise HTTPException(status_code=400, detail="Uploaded file is empty")
     
-    elif url:
+    elif downloadurl:
         # Handle URL download
         try:
             logger.info(f"Downloading from URL: {url}")
             async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
-                response = await client.get(url)
+                response = await client.get(downloadurl)
                 response.raise_for_status()
                 
                 file_bytes = response.content
-                filename = get_filename_from_headers(response.headers, url)
+                filename = get_filename_from_headers(response.headers, downloadurl)
                 
                 logger.info(f"Downloaded {len(file_bytes)} bytes, filename: {filename}")
                 

@@ -160,7 +160,9 @@ async def insert_document_embeddings(
         select(Embedding).where(Embedding.hash == hash)
     )
     if existing.scalars().first():
+        logging.info(f"Document with hash {hash} already exists, skipping insertion.")
         return 0
+
 
 
     """Insert embeddings with full document metadata"""
