@@ -6,8 +6,8 @@ WORKDIR /app
 # Install uv with no cache
 RUN pip install --no-cache-dir uv
 
-# Copy dependency files first (for better layer caching)
-COPY pyproject.toml uv.lock* ./
+# Copy dependency files AND readme FIRST (for better layer caching)
+COPY pyproject.toml uv.lock* README.md ./
 
 # Set UV link mode to copy (needed for Docker)
 ENV UV_LINK_MODE=copy
@@ -26,7 +26,6 @@ COPY --from=builder /app/.venv /app/.venv
 # Copy application code
 COPY app/ ./app/
 COPY dev.py ./
-COPY README.md ./
 
 # Expose port
 EXPOSE 7979
