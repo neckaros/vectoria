@@ -29,7 +29,7 @@ services:
       - "7979:7979"
     env_file: .env
     environment:
-      DATABASE_URL: postgresql://rag_user:${RAG_USER_PASSWORD}@vectoria:${POSTGRES_PORT:-5432}/vectordb
+      DATABASE_URL: postgresql://rag_user:${RAG_USER_PASSWORD}@vectoria:5432/vectordb
       API_TOKENS: ${API_TOKENS}
     depends_on:
       - vectoria
