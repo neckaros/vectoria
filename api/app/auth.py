@@ -29,10 +29,18 @@ async def verify_token(
     valid_tokens = get_valid_tokens()
     
     # Check if token exists in any project
-    for project, tokens in valid_tokens.items():
-        if token in tokens:
-            logger.info(f"Token verified for project: {project}")
-            return {"project": project, "token": token}
+    for project, token_list in valid_tokens.items():
+        logger.info(f"[verify_token] Checking project '{project}' with {len(token_list)} token(s)")
+        
+        for idx, stored_token in enumerate(token_list):
+            logger.info(f"[verify_token]   Comparing token {idx}:")
+            logger.info(f"[verify_token]     Incoming: '{token}'")
+            logger.info(f"[verify_token]     Stored:   '{stored_token}'")
+            logger.info(f"[verify_token]     Equal: {token == stored_token}")
+            
+            if token == stored_token:
+                logger.info(f"[verify_token] ✓ Token verified for project: {project}")
+                return {"project": project, "token": token}
     
     logger.warning(f"Invalid token attempted: {token[:10]}...")
     raise HTTPException(
