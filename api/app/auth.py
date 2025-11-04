@@ -12,7 +12,7 @@ security = HTTPBearer()
 def get_valid_tokens() -> Dict[str, List[str]]:
     """Load valid tokens from environment"""
     tokens_json = os.getenv("API_TOKENS", "{}")
-    
+    logger.info(f"Raw API_TOKENS env: {repr(tokens_json)}")
     try:
         tokens = json.loads(tokens_json)
         logger.info(f"Loaded tokens for projects: {list(tokens.keys())}")
