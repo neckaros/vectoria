@@ -1,5 +1,5 @@
 # Build stage
-FROM python:3.11-alpine AS builder
+FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
@@ -16,7 +16,7 @@ ENV UV_LINK_MODE=copy
 RUN uv sync --frozen --no-dev
 
 # Runtime stage
-FROM python:3.11-alpine
+FROM python:3.11-slim
 
 WORKDIR /app
 
