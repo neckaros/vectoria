@@ -272,7 +272,7 @@ async def vector_search(
         FROM embeddings
         WHERE 
             (:project_filter IS NULL OR project = :project_filter)
-            (:category_filter IS NULL OR category = :category_filter)
+            AND (:category_filter IS NULL OR category = :category_filter)
             AND (:author_filter IS NULL OR author = :author_filter)
             AND (:source_filter IS NULL OR source = :source_filter)
             AND (:start_parent_url IS NULL OR parent_url LIKE :start_parent_url)
