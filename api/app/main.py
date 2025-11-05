@@ -72,7 +72,7 @@ async def upload_document(
         from app.services import check_for_existing_embedding
         exists = await check_for_existing_embedding(session, hash)
         if exists:
-            raise HTTPException(status_code=409, detail="Document with the same hash already exists. Use override=true to force re-ingestion.")
+            raise HTTPException(status_code=204, detail="Document with the same hash already exists.")
     
     # Validate: need either file or URL
     if not file and not downloadurl:
